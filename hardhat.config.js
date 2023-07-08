@@ -16,6 +16,10 @@ module.exports = {
         { version: "0.6.6" }
       ]
     },
+    paths: {
+      sources: "./contracts",
+      tests: "./test",
+    },
     dependencyCompiler: {
       paths: [
         '@gnosis.pm/safe-contracts/contracts/GnosisSafe.sol',
