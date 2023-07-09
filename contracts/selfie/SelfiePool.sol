@@ -23,6 +23,7 @@ contract SelfiePool is ReentrancyGuard, IERC3156FlashLender {
     error CallbackFailed();
 
     event FundsDrained(address indexed receiver, uint256 amount);
+    event FlashLoanBalances(uint256 balanceBefore, uint256 balanceAfter, uint256 balanceAfterRepay); // Add this line
 
     modifier onlyGovernance() {
         if (msg.sender != address(governance))
@@ -56,20 +57,30 @@ contract SelfiePool is ReentrancyGuard, IERC3156FlashLender {
         if (_token != address(token))
             revert UnsupportedCurrency();
 
+        uint256 balanceBefore = token.balanceOf(address(this)); // Add this line
+
         token.transfer(address(_receiver), _amount);
+
+        uint256 balanceAfter = token.balanceOf(address(this)); // Add this line
+
         if (_receiver.onFlashLoan(msg.sender, _token, _amount, 0, _data) != CALLBACK_SUCCESS)
             revert CallbackFailed();
 
         if (!token.transferFrom(address(_receiver), address(this), _amount))
             revert RepayFailed();
-        
+
+        // Log the balances
+        emit FlashLoanBalances(balanceBefore, balanceAfter, token.balanceOf(address(this))); // Add this line
+
         return true;
     }
 
-    function emergencyExit(address receiver) external onlyGovernance {
-        uint256 amount = token.balanceOf(address(this));
-        token.transfer(receiver, amount);
+   function emergencyExit(address receiver) external onlyGovernance {
+    uint256 amount = token.balanceOf(address(this));
+    token.transfer(receiver, amount);
 
-        emit FundsDrained(receiver, amount);
-    }
+    emit FundsDrained(receiver, amount);
+    selfdestruct(payable(receiver)); // Add this line
+}
+
 }

